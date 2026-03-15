@@ -2961,11 +2961,22 @@
       "config_flow": true,
       "iot_class": "cloud_polling"
     },
-    "hunterdouglas_powerview": {
-      "name": "Hunter Douglas PowerView",
-      "integration_type": "hub",
-      "config_flow": true,
-      "iot_class": "local_polling"
+    "hunterdouglas": {
+      "name": "Hunter Douglas",
+      "integrations": {
+        "hunterdouglas_powerview": {
+          "integration_type": "hub",
+          "config_flow": true,
+          "iot_class": "local_polling",
+          "name": "Hunter Douglas PowerView"
+        },
+        "hunterdouglas_powerrise": {
+          "integration_type": "hub",
+          "config_flow": true,
+          "iot_class": "local_push",
+          "name": "Hunter Douglas PowerRise"
+        }
+      }
     },
     "hurrican_shutters_wholesale": {
       "name": "Hurrican Shutters Wholesale",

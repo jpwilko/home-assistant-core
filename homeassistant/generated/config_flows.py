@@ -308,6 +308,7 @@ FLOWS = {
         "hue",
         "hue_ble",
         "huisbaasje",
+        "hunterdouglas_powerrise",
         "hunterdouglas_powerview",
         "husqvarna_automower",
         "husqvarna_automower_ble",

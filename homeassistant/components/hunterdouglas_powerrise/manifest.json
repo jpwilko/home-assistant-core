@@ -1,0 +1,10 @@
+{
+  "domain": "hunterdouglas_powerrise",
+  "name": "Hunter Douglas PowerRise",
+  "codeowners": ["@jpwilko"],
+  "config_flow": true,
+  "documentation": "https://www.home-assistant.io/integrations/hunterdouglas_powerrise",
+  "iot_class": "local_push",
+  "quality_scale": "bronze",
+  "requirements": ["aio-powerrise-api==0.1.0.dev1"]
+}

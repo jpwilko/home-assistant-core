@@ -1,0 +1,5 @@
+{
+  "domain": "hunterdouglas",
+  "name": "Hunter Douglas",
+  "integrations": ["hunterdouglas_powerview", "hunterdouglas_powerrise"]
+}
