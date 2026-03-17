@@ -72,7 +72,6 @@ class PowerRiseCover(PowerRiseEntity, CoverEntity):
         self._attr_supported_features = (
             CoverEntityFeature.OPEN
             | CoverEntityFeature.CLOSE
-            | CoverEntityFeature.STOP
             | CoverEntityFeature.SET_POSITION
         )
 
