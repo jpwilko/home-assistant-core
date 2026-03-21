@@ -6,5 +6,5 @@
   "documentation": "https://www.home-assistant.io/integrations/hunterdouglas_powerrise",
   "iot_class": "local_push",
   "quality_scale": "bronze",
-  "requirements": ["aio-powerrise-api==0.1.0.dev2"]
+  "requirements": ["aio-powerrise-api==0.1.0.dev3"]
 }
