@@ -7,10 +7,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from homeassistant import config_entries
-from homeassistant.components.hunterdouglas_powerrise.const import DOMAIN
+from homeassistant.components.hunterdouglas_powerrise.const import (
+    CONF_USE_DISCOVERY,
+    DOMAIN,
+)
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+
+from .conftest import MOCK_HOST, MOCK_MAC
 
 from tests.common import MockConfigEntry
 
@@ -32,7 +37,8 @@ def mock_try_connect(mock_hub: MagicMock):
         return_value={
             "title": "My Home",
             "firmware": 18,
-            "host": "192.168.1.100",
+            "host": MOCK_HOST,
+            "mac_address": MOCK_MAC,
         },
     ) as mock_connect:
         yield mock_connect
@@ -55,13 +61,13 @@ async def test_user_form_no_discovery(
 
     result2 = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {CONF_HOST: "192.168.1.100"},
+        {CONF_HOST: MOCK_HOST},
     )
     await hass.async_block_till_done()
 
     assert result2["type"] is FlowResultType.CREATE_ENTRY
     assert result2["title"] == "My Home"
-    assert result2["data"] == {CONF_HOST: "192.168.1.100"}
+    assert result2["data"] == {CONF_HOST: MOCK_HOST, CONF_USE_DISCOVERY: False}
 
 
 async def test_user_form_discovery(
@@ -71,7 +77,7 @@ async def test_user_form_discovery(
     mock_setup_entry: AsyncMock,
 ) -> None:
     """Test auto-discovery flow."""
-    mock_discover_hub.return_value = "192.168.1.100"
+    mock_discover_hub.return_value = MOCK_HOST
 
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
@@ -88,7 +94,7 @@ async def test_user_form_discovery(
 
     assert result2["type"] is FlowResultType.CREATE_ENTRY
     assert result2["title"] == "My Home"
-    assert result2["data"] == {CONF_HOST: "192.168.1.100"}
+    assert result2["data"] == {CONF_HOST: MOCK_HOST, CONF_USE_DISCOVERY: True}
 
 
 async def test_user_form_cannot_connect(
@@ -111,7 +117,7 @@ async def test_user_form_cannot_connect(
     ):
         result2 = await hass.config_entries.flow.async_configure(
             result["flow_id"],
-            {CONF_HOST: "192.168.1.100"},
+            {CONF_HOST: MOCK_HOST},
         )
 
     assert result2["type"] is FlowResultType.FORM
@@ -136,7 +142,7 @@ async def test_user_form_already_configured(
 
     result2 = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {CONF_HOST: "192.168.1.100"},
+        {CONF_HOST: MOCK_HOST},
     )
 
     assert result2["type"] is FlowResultType.ABORT
@@ -149,7 +155,7 @@ async def test_discovery_cannot_connect_falls_back(
     mock_setup_entry: AsyncMock,
 ) -> None:
     """Test that discovery falls back to manual entry when connection fails."""
-    mock_discover_hub.return_value = "192.168.1.100"
+    mock_discover_hub.return_value = MOCK_HOST
 
     with patch(
         "homeassistant.components.hunterdouglas_powerrise.config_flow._async_try_connect",
@@ -163,3 +169,60 @@ async def test_discovery_cannot_connect_falls_back(
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "user"
     assert result["errors"] == {"base": "cannot_connect"}
+
+
+async def test_reconfigure_success(
+    hass: HomeAssistant,
+    mock_try_connect: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Test successful reconfiguration of the hub IP and discovery mode."""
+    mock_config_entry.add_to_hass(hass)
+
+    result = await mock_config_entry.start_reconfigure_flow(hass)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reconfigure"
+
+    new_host = "192.168.1.200"
+    mock_try_connect.return_value = {
+        "title": "My Home",
+        "firmware": 18,
+        "host": new_host,
+        "mac_address": MOCK_MAC,
+    }
+
+    result2 = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_HOST: new_host, CONF_USE_DISCOVERY: True},
+    )
+    await hass.async_block_till_done()
+
+    assert result2["type"] is FlowResultType.ABORT
+    assert result2["reason"] == "reconfigure_successful"
+    assert mock_config_entry.data[CONF_HOST] == new_host
+    assert mock_config_entry.data[CONF_USE_DISCOVERY] is True
+
+
+async def test_reconfigure_cannot_connect(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Test reconfiguration shows error when connection fails."""
+    mock_config_entry.add_to_hass(hass)
+
+    result = await mock_config_entry.start_reconfigure_flow(hass)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reconfigure"
+
+    with patch(
+        "homeassistant.components.hunterdouglas_powerrise.config_flow._async_try_connect",
+        side_effect=OSError("Connection refused"),
+    ):
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_HOST: "192.168.1.200", CONF_USE_DISCOVERY: False},
+        )
+
+    assert result2["type"] is FlowResultType.FORM
+    assert result2["step_id"] == "reconfigure"
+    assert result2["errors"] == {"base": "cannot_connect"}

@@ -12,13 +12,20 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_HOST
 
-from .const import DOMAIN
+from .const import CONF_USE_DISCOVERY, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_HOST): str,
+    }
+)
+
+STEP_RECONFIGURE_DATA_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_HOST): str,
+        vol.Required(CONF_USE_DISCOVERY, default=False): bool,
     }
 )
 
@@ -35,6 +42,7 @@ async def _async_try_connect(host: str) -> dict[str, Any]:
         house = await hub.get_data()
         name = house.name or "PowerRise Hub"
         firmware = house.bridge.firmware_version
+        mac_address = hub.mac_address
     finally:
         await hub.close()
 
@@ -42,6 +50,7 @@ async def _async_try_connect(host: str) -> dict[str, Any]:
         "title": name,
         "firmware": firmware,
         "host": host,
+        "mac_address": mac_address,
     }
 
 
@@ -70,7 +79,9 @@ class PowerRiseConfigFlow(ConfigFlow, domain=DOMAIN):
         Otherwise, show a form for manual IP entry.
         """
         if user_input is not None:
-            return await self._async_validate_and_create(user_input[CONF_HOST])
+            return await self._async_validate_and_create(
+                user_input[CONF_HOST], use_discovery=False
+            )
 
         # Try auto-discovery
         discovered_ip = await _async_discover_hub()
@@ -91,7 +102,9 @@ class PowerRiseConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             assert self.discovered_ip is not None
-            return await self._async_validate_and_create(self.discovered_ip)
+            return await self._async_validate_and_create(
+                self.discovered_ip, use_discovery=True
+            )
 
         # Try to get the hub name for the description
         assert self.discovered_ip is not None
@@ -124,7 +137,9 @@ class PowerRiseConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            return await self._async_validate_and_create(user_input[CONF_HOST], errors)
+            return await self._async_validate_and_create(
+                user_input[CONF_HOST], use_discovery=False, errors=errors
+            )
 
         return self.async_show_form(
             step_id="manual",
@@ -132,15 +147,56 @@ class PowerRiseConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle reconfiguration of an existing entry."""
+        entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            host: str = user_input[CONF_HOST]
+            use_discovery: bool = user_input[CONF_USE_DISCOVERY]
+            try:
+                # Validate connectivity; return value not needed here.
+                await _async_try_connect(host)
+            except OSError, TimeoutError:
+                _LOGGER.debug("Could not connect to hub at %s", host)
+                errors["base"] = "cannot_connect"
+            else:
+                return self.async_update_reload_and_abort(
+                    entry,
+                    data_updates={
+                        CONF_HOST: host,
+                        CONF_USE_DISCOVERY: use_discovery,
+                    },
+                )
+
+        current_host = entry.data.get(CONF_HOST, "")
+        current_use_discovery = entry.data.get(CONF_USE_DISCOVERY, False)
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_HOST, default=current_host): str,
+                    vol.Required(
+                        CONF_USE_DISCOVERY, default=current_use_discovery
+                    ): bool,
+                }
+            ),
+            errors=errors,
+        )
+
     async def _async_validate_and_create(
-        self, host: str, errors: dict[str, str] | None = None
+        self,
+        host: str,
+        *,
+        use_discovery: bool = False,
+        errors: dict[str, str] | None = None,
     ) -> ConfigFlowResult:
         """Validate connection and create the config entry."""
         if errors is None:
             errors = {}
-
-        # Prevent duplicate entries for the same host
-        self._async_abort_entries_match({CONF_HOST: host})
 
         try:
             info = await _async_try_connect(host)
@@ -153,10 +209,13 @@ class PowerRiseConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors=errors,
             )
 
-        await self.async_set_unique_id(host)
-        self._abort_if_unique_id_configured(updates={CONF_HOST: host})
+        mac = info["mac_address"] or host
+        await self.async_set_unique_id(mac)
+        self._abort_if_unique_id_configured(
+            updates={CONF_HOST: host, CONF_USE_DISCOVERY: use_discovery}
+        )
 
         return self.async_create_entry(
             title=info["title"],
-            data={CONF_HOST: host},
+            data={CONF_HOST: host, CONF_USE_DISCOVERY: use_discovery},
         )

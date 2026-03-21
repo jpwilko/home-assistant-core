@@ -8,12 +8,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from aiopowerrise.models import Bridge, House, Room, Shade
 import pytest
 
-from homeassistant.components.hunterdouglas_powerrise.const import DOMAIN
+from homeassistant.components.hunterdouglas_powerrise.const import (
+    CONF_USE_DISCOVERY,
+    DOMAIN,
+)
 from homeassistant.const import CONF_HOST
 
 from tests.common import MockConfigEntry
 
 MOCK_HOST = "192.168.1.100"
+MOCK_MAC = "00:0B:3C:60:65:A3"
 MOCK_HOUSE_NAME = "My Home"
 MOCK_FIRMWARE = 18
 
@@ -22,7 +26,7 @@ def _create_mock_house() -> House:
     """Create a mock House with rooms and shades."""
     house = House()
     house.name = MOCK_HOUSE_NAME
-    house.bridge = Bridge(firmware_version=MOCK_FIRMWARE)
+    house.bridge = Bridge(firmware_version=MOCK_FIRMWARE, mac_address=MOCK_MAC)
 
     # Room 1: Standard shade (Duette)
     room1 = Room(id=1, name="Living Room", brand_index=1)
@@ -65,8 +69,8 @@ def mock_config_entry() -> MockConfigEntry:
     return MockConfigEntry(
         domain=DOMAIN,
         title=MOCK_HOUSE_NAME,
-        data={CONF_HOST: MOCK_HOST},
-        unique_id=MOCK_HOST,
+        data={CONF_HOST: MOCK_HOST, CONF_USE_DISCOVERY: False},
+        unique_id=MOCK_MAC,
     )
 
 
@@ -85,6 +89,7 @@ def mock_hub() -> Generator[MagicMock]:
         hub_instance.connected = True
         hub_instance.name = MOCK_HOUSE_NAME
         hub_instance.firmware_version = MOCK_FIRMWARE
+        hub_instance.mac_address = MOCK_MAC
         hub_instance.house = mock_house
 
         hub_instance.connect = AsyncMock()
